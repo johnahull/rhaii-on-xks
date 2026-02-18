@@ -29,103 +29,6 @@ class CloudProviderConfig(TypedDict):
     detect_labels: list[str]
     instance_families: list[str]
     accelerators: list[AcceleratorConfig]
-    zone_data: dict | None
-
-
-# GCP zone availability data (ported from check-accelerator-availability.sh, Feb 2026)
-_GCP_ZONE_DATA = {
-    'tpu': {
-        'v6e': {
-            'us-central1-b': 'US Central',
-            'us-east1-d': 'US East',
-            'us-east5-a': 'US East (Columbus)',
-            'us-east5-b': 'US East (Columbus)',
-            'us-south1-a': 'US South (Dallas)',
-            'us-south1-b': 'US South (Dallas)',
-            'europe-west4-a': 'Europe (Netherlands)',
-            'asia-northeast1-b': 'Asia (Tokyo)',
-            'southamerica-west1-a': 'South America (Santiago)'
-        },
-        'v5e': {
-            'europe-west4-b': 'Europe (Netherlands)',
-            'us-central1-a': 'US Central',
-            'us-south1-a': 'US South (Dallas)',
-            'us-west1-c': 'US West (Oregon)',
-            'us-west4-a': 'US West (Las Vegas)'
-        },
-        'v5p': {
-            'europe-west4-b': 'Europe (Netherlands)',
-            'us-central1-a': 'US Central',
-            'us-east5-a': 'US East (Columbus)'
-        }
-    },
-    'gpu': {
-        't4': {
-            'us-central1-a': 'US Central',
-            'us-central1-b': 'US Central',
-            'us-central1-c': 'US Central',
-            'us-central1-f': 'US Central',
-            'us-east1-b': 'US East',
-            'us-east1-c': 'US East',
-            'us-east1-d': 'US East',
-            'us-east4-a': 'US East (Virginia)',
-            'us-east4-b': 'US East (Virginia)',
-            'us-east4-c': 'US East (Virginia)',
-            'us-west1-a': 'US West (Oregon)',
-            'us-west1-b': 'US West (Oregon)',
-            'us-west2-b': 'US West (Los Angeles)',
-            'us-west2-c': 'US West (Los Angeles)',
-            'us-west4-a': 'US West (Las Vegas)',
-            'us-west4-b': 'US West (Las Vegas)',
-            'europe-west1-b': 'Europe (Belgium)',
-            'europe-west1-c': 'Europe (Belgium)',
-            'europe-west4-a': 'Europe (Netherlands)',
-            'europe-west4-b': 'Europe (Netherlands)',
-            'asia-east1-a': 'Asia (Taiwan)',
-            'asia-southeast1-a': 'Asia (Singapore)'
-        },
-        'a100': {
-            'us-central1-a': 'US Central',
-            'us-central1-b': 'US Central',
-            'us-central1-c': 'US Central',
-            'us-east1-c': 'US East',
-            'us-east4-a': 'US East (Virginia)',
-            'us-east4-b': 'US East (Virginia)',
-            'us-west1-a': 'US West (Oregon)',
-            'us-west1-b': 'US West (Oregon)',
-            'europe-west4-a': 'Europe (Netherlands)',
-            'europe-west4-b': 'Europe (Netherlands)',
-            'asia-southeast1-c': 'Asia (Singapore)',
-            'asia-northeast1-a': 'Asia (Tokyo)',
-            'asia-northeast1-c': 'Asia (Tokyo)'
-        },
-        'l4': {
-            'us-central1-a': 'US Central',
-            'us-central1-b': 'US Central',
-            'us-central1-c': 'US Central',
-            'us-east1-c': 'US East',
-            'us-east4-a': 'US East (Virginia)',
-            'us-east4-b': 'US East (Virginia)',
-            'us-west1-a': 'US West (Oregon)',
-            'us-west1-b': 'US West (Oregon)',
-            'us-west4-b': 'US West (Las Vegas)',
-            'europe-west1-b': 'Europe (Belgium)',
-            'europe-west4-a': 'Europe (Netherlands)',
-            'asia-southeast1-b': 'Asia (Singapore)',
-            'asia-northeast1-b': 'Asia (Tokyo)'
-        },
-        'h100': {
-            'us-central1-a': 'US Central',
-            'us-central1-b': 'US Central',
-            'us-east4-a': 'US East (Virginia)',
-            'us-east4-c': 'US East (Virginia)',
-            'us-west1-a': 'US West (Oregon)',
-            'us-west4-b': 'US West (Las Vegas)',
-            'europe-west4-a': 'Europe (Netherlands)',
-            'asia-southeast1-c': 'Asia (Singapore)'
-        }
-    }
-}
 
 
 CLOUD_PROVIDERS: dict[str, CloudProviderConfig] = {
@@ -143,8 +46,7 @@ CLOUD_PROVIDERS: dict[str, CloudProviderConfig] = {
             "type_label": "nvidia.com/gpu.present",
             "resource_key": "nvidia.com/gpu",
             "extra_labels": []
-        }],
-        "zone_data": None
+        }]
     },
     "gcp": {
         "detect_labels": [
@@ -165,8 +67,7 @@ CLOUD_PROVIDERS: dict[str, CloudProviderConfig] = {
                 "resource_key": "google.com/tpu",
                 "extra_labels": ["cloud.google.com/gke-tpu-topology"]
             }
-        ],
-        "zone_data": _GCP_ZONE_DATA
+        ]
     }
 }
 
@@ -257,45 +158,6 @@ def validate_accelerators(nodes, config: CloudProviderConfig, logger) -> tuple[b
         return True, " | ".join(all_found)
     accel_names = [a["name"] for a in config["accelerators"]]
     return False, f"No accelerators found (checked: {', '.join(accel_names)})"
-
-
-def validate_zone_compatibility(nodes, zone_data, logger) -> tuple[bool, str]:
-    """Validate accelerators are in known-good zones (GCP-specific)."""
-    warnings = []
-
-    for node in nodes:
-        labels = node.metadata.labels or {}
-        zone = labels.get("topology.kubernetes.io/zone", "")
-        if not zone:
-            continue
-
-        # Check TPU zone compatibility
-        tpu_type = labels.get("cloud.google.com/gke-tpu-accelerator", "")
-        if tpu_type:
-            tpu_version = tpu_type.split('-')[0] if '-' in tpu_type else tpu_type
-            valid_zones = zone_data.get('tpu', {}).get(tpu_version, {})
-            if valid_zones and zone not in valid_zones:
-                warnings.append(
-                    f"TPU {tpu_type} on {node.metadata.name} in zone {zone} "
-                    f"not in validated zones for {tpu_version}"
-                )
-                logger.warning(warnings[-1])
-
-        # Check GPU zone compatibility
-        gpu_type = labels.get("cloud.google.com/gke-accelerator", "")
-        if gpu_type:
-            gpu_short = gpu_type.replace("nvidia-tesla-", "").replace("nvidia-", "")
-            valid_zones = zone_data.get('gpu', {}).get(gpu_short, {})
-            if valid_zones and zone not in valid_zones:
-                warnings.append(
-                    f"GPU {gpu_type} on {node.metadata.name} in zone {zone} "
-                    f"not in validated zones for {gpu_short}"
-                )
-                logger.warning(warnings[-1])
-
-    if warnings:
-        return False, "; ".join(warnings)
-    return True, "All accelerators in validated zones"
 
 
 # ---------------------------------------------------------------------------
@@ -455,17 +317,6 @@ class LLMDXKSChecks:
             }
         }
 
-        # Add zone validation if the provider has zone data
-        if self.provider_config["zone_data"] is not None:
-            tests["cluster"]["tests"].append({
-                "name": "zone_compatibility",
-                "function": self._test_zone_compatibility,
-                "description": "Validate accelerators in known-good zones",
-                "suggested_action": "Deploy to recommended zones for better availability",
-                "result": False,
-                "optional": True
-            })
-
         return tests
 
     # -- Cloud validation test wrappers ------------------------------------
@@ -479,15 +330,6 @@ class LLMDXKSChecks:
     def _test_accelerators(self) -> bool:
         nodes = self._list_nodes()
         success, message = validate_accelerators(nodes, self.provider_config, self.logger)
-        (self.logger.info if success else self.logger.warning)(message)
-        return success
-
-    def _test_zone_compatibility(self) -> bool:
-        zone_data = self.provider_config["zone_data"]
-        if zone_data is None:
-            return True
-        nodes = self._list_nodes()
-        success, message = validate_zone_compatibility(nodes, zone_data, self.logger)
         (self.logger.info if success else self.logger.warning)(message)
         return success
 
