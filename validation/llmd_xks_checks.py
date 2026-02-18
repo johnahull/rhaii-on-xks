@@ -3,7 +3,7 @@
 LLMD xKS preflight checks.
 
 Validates Kubernetes cluster readiness for llm-d deployments on managed
-Kubernetes services (Azure AKS).
+Kubernetes services (Azure AKS, Google Cloud GKE).
 """
 
 import configargparse  # pyright: ignore[reportMissingImports]
@@ -19,7 +19,7 @@ import kubernetes  # pyright: ignore[reportMissingImports]
 # ---------------------------------------------------------------------------
 
 class AcceleratorConfig(TypedDict):
-    name: str               # e.g. "GPU"
+    name: str               # e.g. "GPU", "TPU"
     type_label: str         # node label for accelerator type
     resource_key: str       # allocatable resource key
     extra_labels: list[str]  # additional labels to report (e.g. topology)
@@ -47,6 +47,27 @@ CLOUD_PROVIDERS: dict[str, CloudProviderConfig] = {
             "resource_key": "nvidia.com/gpu",
             "extra_labels": []
         }]
+    },
+    "gcp": {
+        "detect_labels": [
+            "cloud.google.com/gke-nodepool",
+            "cloud.google.com/gke-os-distribution"
+        ],
+        "instance_families": ["ct6e", "ct5e", "ct5p", "n1", "a2", "g2", "a3"],
+        "accelerators": [
+            {
+                "name": "GPU",
+                "type_label": "cloud.google.com/gke-accelerator",
+                "resource_key": "nvidia.com/gpu",
+                "extra_labels": []
+            },
+            {
+                "name": "TPU",
+                "type_label": "cloud.google.com/gke-tpu-accelerator",
+                "resource_key": "google.com/tpu",
+                "extra_labels": ["cloud.google.com/gke-tpu-topology"]
+            }
+        ]
     }
 }
 
@@ -68,8 +89,8 @@ def detect_cloud(nodes, config: CloudProviderConfig) -> bool:
 def validate_instance_types(nodes, config: CloudProviderConfig, logger) -> tuple[bool, str]:
     """Check node instance-type labels against config's instance_families.
 
-    Families containing '_' use exact matching (e.g. Azure).
-    Other families use prefix matching on the first '-'-delimited segment.
+    Azure families contain '_' and use exact matching.
+    GCP families use prefix matching on the first '-'-delimited segment.
     """
     families = config["instance_families"]
     # Determine match mode from naming convention
@@ -225,7 +246,7 @@ class LLMDXKSChecks:
                     {
                         "name": "accelerators",
                         "function": self._test_accelerators,
-                        "description": "Validate accelerator availability",
+                        "description": "Validate GPU/TPU availability",
                         "suggested_action": "Provision cluster with supported accelerators",
                         "result": False
                     }
@@ -583,7 +604,7 @@ def cli_arguments():
 
     parser.add_argument(
         "-u", "--cloud-provider",
-        choices=["auto", "azure"],
+        choices=["auto", "azure", "gcp"],
         default="auto",
         env_var="LLMD_XKS_CLOUD_PROVIDER",
         help="Cloud provider to perform checks on (by default, try to auto-detect)"
