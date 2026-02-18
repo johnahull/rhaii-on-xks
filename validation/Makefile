@@ -4,6 +4,7 @@ CONTAINER_REPO ?= localhost/llmd-xks-checks
 CONTAINER_TAG ?= latest
 CONTAINER_TOOL ?= podman
 HOST_KUBECONFIG ?= ~/.kube/config
+HOST_GCLOUD_CONFIG ?= ~/.config/gcloud
 FROM ?= registry.fedoraproject.org/fedora:latest
 
 .PHONY: help container run push lint pep8-fix
@@ -24,6 +25,7 @@ help:
 	@echo "  CONTAINER_TAG=$(CONTAINER_TAG) Container tag to use for build and run"
 	@echo "  CONTAINER_TOOL=$(CONTAINER_TOOL) Container tool to use for build and run"
 	@echo "  HOST_KUBECONFIG=$(HOST_KUBECONFIG) Path to kubeconfig for container run"
+	@echo "  HOST_GCLOUD_CONFIG=$(HOST_GCLOUD_CONFIG) Path to gcloud config dir for GKE auth"
 	@echo "  FROM=$(FROM) Base image to use for the container build"
 
 
@@ -33,15 +35,15 @@ container:
 
 # Run the container image with all tests
 run:
-	$(CONTAINER_TOOL) run --rm -it --volume $(HOST_KUBECONFIG):/root/.kube/config:ro,Z $(CONTAINER_REPO):$(CONTAINER_TAG)
+	$(CONTAINER_TOOL) run --rm -it --volume $(HOST_KUBECONFIG):/root/.kube/config:ro,Z --volume $(HOST_GCLOUD_CONFIG):/root/.config/gcloud:Z $(CONTAINER_REPO):$(CONTAINER_TAG)
 
 # Run the container image with cluster readiness tests
 run-cluster:
-	$(CONTAINER_TOOL) run --rm -it --volume $(HOST_KUBECONFIG):/root/.kube/config:ro,Z $(CONTAINER_REPO):$(CONTAINER_TAG) -s cluster
+	$(CONTAINER_TOOL) run --rm -it --volume $(HOST_KUBECONFIG):/root/.kube/config:ro,Z --volume $(HOST_GCLOUD_CONFIG):/root/.config/gcloud:Z $(CONTAINER_REPO):$(CONTAINER_TAG) -s cluster
 
 # Run the container image with operators readiness tests
 run-operators:
-	$(CONTAINER_TOOL) run --rm -it --volume $(HOST_KUBECONFIG):/root/.kube/config:ro,Z $(CONTAINER_REPO):$(CONTAINER_TAG) -s operators
+	$(CONTAINER_TOOL) run --rm -it --volume $(HOST_KUBECONFIG):/root/.kube/config:ro,Z --volume $(HOST_GCLOUD_CONFIG):/root/.config/gcloud:Z $(CONTAINER_REPO):$(CONTAINER_TAG) -s operators
 
 
 # Push the container image to the container registry
