@@ -5,7 +5,11 @@ RUN source /etc/os-release && \
     if [ "${PLATFORM_ID}" == "platform:el9" ]; then dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm; fi && \
     if [ "${PLATFORM_ID}" == "platform:el10" ]; then dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm; fi
 
-RUN dnf install -y python3-configargparse python3-kubernetes python3-pip python3-build
+RUN printf '[google-cloud-cli]\nname=Google Cloud CLI\nbaseurl=https://packages.cloud.google.com/yum/repos/cloud-sdk-el9-x86_64\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=0\ngpgkey=https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg\n' \
+    > /etc/yum.repos.d/google-cloud-sdk.repo
+
+RUN dnf install -y python3-configargparse python3-kubernetes python3-pip python3-build \
+    google-cloud-cli-gke-gcloud-auth-plugin
 
 COPY . /root/src
 RUN python3 -m build /root/src -w -o /root/src && python3 -m pip install --no-deps /root/src/*.whl && rm -rf /root/src
